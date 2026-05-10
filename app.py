@@ -231,7 +231,7 @@ def _evaluate_alerts():
     THRESHOLD = 0.20
 
     if rate >= THRESHOLD and active is None:
-        # FIRE new alert
+        # FIRE new alert — only once per breach period
         alert_id = "alert-" + uuid.uuid4().hex[:8]
         fired_at = _now_iso()
         alert = {
@@ -305,11 +305,9 @@ def _probe_proxy(proxy_id: str):
         resp = http_requests.get(url, timeout=timeout_s, allow_redirects=True)
         if 200 <= resp.status_code < 300:
             new_status = "up"
-        elif 500 <= resp.status_code < 600:
-            new_status = "down"
         else:
-            # 3xx without redirect, 4xx — treat as up (server responded)
-            new_status = "up"
+            # Any non-2xx (4xx, 5xx, 3xx without redirect) = down
+            new_status = "down"
     except Exception:
         new_status = "down"
 
@@ -518,7 +516,10 @@ def delete_proxies():
 @app.route("/alerts", methods=["GET"])
 def get_alerts():
     with _lock:
-        result = list(_alerts)
+        result = [
+            {k: v for k, v in a.items() if not k.startswith("_")}
+            for a in _alerts
+        ]
     return jsonify(result), 200
 
 
